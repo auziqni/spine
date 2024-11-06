@@ -28,8 +28,7 @@ SPIClass touchSPI = SPIClass(VSPI);
 XPT2046_Touchscreen ts(TOUCH_CS_PIN, TOUCH_IRQ_PIN);
 
 // global variable Utama
-// unsigned int currentTimer = 0, timer = 0, timerinterval = 1000;  // TODO: DELETE THIS
-unsigned long timerColdstart = 0, intervalTimerColdstart = 10000;
+unsigned long timerColdstart = 0, intervalTimerColdstart = 1000; // TODO: interval 10
 unsigned long timerSerialMOnitor = 0;
 unsigned long timerReadMpu = 0, intervalTimerReadMpu = 100;
 
@@ -70,29 +69,29 @@ class Terminal
 {
 private:
   static const int BOX_WIDTH = 140;
-  static const int BOX_HEIGHT = 65;
+  static const int BOX_HEIGHT = 70;
   static const int MARGIN = 10;
 
 public:
   void drawBoxes()
   {
     // Clear previous display
-    tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_BLACK);
+    tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_WHITE);
 
     // Draw main title
     tft.setTextColor(TFT_WHITE);
     tft.setTextSize(2);
-    tft.drawString("Data Monitoring", TERM_X + 60, TERM_Y + 5);
+    tft.drawString("DATA MONITORING", TERM_X + 60, TERM_Y + 2);
 
     // Calculate positions for boxes
     int startX = TERM_X + MARGIN;
     int startY = TERM_Y + TERM_HEADER_H + MARGIN;
 
     // Draw four boxes
-    drawDataBox("MPU 1", startX, startY, 1);
-    drawDataBox("MPU 2", startX + BOX_WIDTH + MARGIN, startY, 2);
-    drawDataBox("MPU 3", startX, startY + BOX_HEIGHT + MARGIN, 3);
-    drawDataBox("MPU 4", startX + BOX_WIDTH + MARGIN, startY + BOX_HEIGHT + MARGIN, 4);
+    drawDataBox("CERVICAL", startX, startY, 1);
+    drawDataBox("THORACAL", startX + BOX_WIDTH + MARGIN, startY, 2);
+    drawDataBox("LUMBAL", startX, startY + BOX_HEIGHT + MARGIN, 3);
+    drawDataBox("SACRUM", startX + BOX_WIDTH + MARGIN, startY + BOX_HEIGHT + MARGIN, 4);
   }
 
   void updateData()
@@ -111,13 +110,32 @@ public:
 private:
   void drawDataBox(const char *title, int x, int y, int boxNum)
   {
-    // Draw box outline
-    tft.drawRect(x, y, BOX_WIDTH, BOX_HEIGHT, TFT_WHITE);
+    // // Draw box outline
+    // tft.drawRect(x, y, BOX_WIDTH, BOX_HEIGHT, TFT_BLACK);
 
-    // Draw title
-    tft.setTextColor(TFT_CYAN);
+    // // Draw title
+    // tft.setTextColor(TFT_NAVY);
+    // tft.setTextSize(1);
+    // tft.drawString(title, x + 5, y + 5);
+
+    // // Initial data display
+    // updateBoxData(x, y, boxNum);
+
+    // Draw box outline
+    tft.drawRect(x, y, BOX_WIDTH, BOX_HEIGHT, TFT_BLACK);
+
+    // Draw centered title
+    tft.setTextColor(TFT_NAVY);
     tft.setTextSize(1);
-    tft.drawString(title, x + 5, y + 5);
+
+    // Calculate text width and center position
+    int titleWidth = strlen(title) * 6; // Approximate width for size 1 text
+    int titleX = x + (BOX_WIDTH - titleWidth) / 2;
+
+    tft.drawString(title, titleX, y + 5);
+
+    // Draw border bottom (separator line) below title
+    tft.drawLine(x, y + 18, x + BOX_WIDTH, y + 18, TFT_BLACK);
 
     // Initial data display
     updateBoxData(x, y, boxNum);
@@ -126,28 +144,28 @@ private:
   void updateBoxData(int x, int y, int boxNum)
   {
     char buffer[20];
-    tft.setTextColor(TFT_GREEN);
+    tft.setTextColor(TFT_BLACK);
     tft.setTextSize(1);
 
     // Clear previous data area
-    tft.fillRect(x + 5, y + 20, BOX_WIDTH - 10, BOX_HEIGHT - 25, TFT_BLACK);
+    tft.fillRect(x + 5, y + 24, BOX_WIDTH - 10, BOX_HEIGHT - 29, TFT_WHITE);
 
     // Format and display X angle
     snprintf(buffer, sizeof(buffer), "X: %+07.2f", angle_x[boxNum]);
-    tft.drawString(buffer, x + 5, y + 20);
+    tft.drawString(buffer, x + 5, y + 28);
 
     // Format and display Y angle
     snprintf(buffer, sizeof(buffer), "Y: %+07.2f", angle_y[boxNum]);
-    tft.drawString(buffer, x + 5, y + 35);
+    tft.drawString(buffer, x + 5, y + 41);
 
     // Format and display Z angle
     snprintf(buffer, sizeof(buffer), "Z: %+07.2f", angle_z[boxNum]);
-    tft.drawString(buffer, x + 5, y + 50);
+    tft.drawString(buffer, x + 5, y + 54);
   }
 
   void clear()
   {
-    tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_BLACK);
+    tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_WHITE);
   }
 } terminal;
 
@@ -164,17 +182,17 @@ struct Button // Button structure
 // Define buttons begin --------------------------------
 Button startButton = {
     (SCREEN_WIDTH - BTN_WIDTH) / 2,
-    (SCREEN_HEIGHT - BTN_HEIGHT) / 2,
+    (SCREEN_HEIGHT / 2) + 55,
     BTN_WIDTH,
     BTN_HEIGHT,
-    "MULAI"};
+    "START"};
 
 Button nextButton = {
     (SCREEN_WIDTH - BTN_WIDTH) / 2,
-    BTN_Y,
-    BTN_WIDTH,
+    BTN_Y + 8,
+    BTN_WIDTH + 20,
     BTN_HEIGHT,
-    "NEXT >>"};
+    "CLASSIFY"};
 
 Button backButton = {
     (SCREEN_WIDTH - BTN_WIDTH) / 2,
@@ -200,16 +218,44 @@ void drawButton(Button btn, uint16_t color)
   tft.drawString(btn.label, textX, textY);
 }
 
+void drawMainScreen()
+{
+  tft.fillScreen(TFT_WHITE);
+
+  // Draw "Selamat Datang"
+  tft.setTextColor(TFT_NAVY);
+  tft.setTextSize(2); // Medium size
+  const char *welcomeText = "SELAMAT DATANG";
+  int welcomeWidth = strlen(welcomeText) * 12; // Approximate width of text
+  int welcomeX = (SCREEN_WIDTH - welcomeWidth) / 2;
+  tft.drawString(welcomeText, welcomeX, SCREEN_HEIGHT / 5);
+
+  // Draw "SPINE" on first line
+  tft.setTextSize(3); // Larger size
+  const char *titleText1 = "SPINE";
+  int titleWidth1 = strlen(titleText1) * 18; // Approximate width of larger text
+  int titleX1 = (SCREEN_WIDTH - titleWidth1) / 2;
+  tft.drawString(titleText1, titleX1, SCREEN_HEIGHT / 2 - 30);
+
+  // Draw "ASSESSMENT" on second line
+  const char *titleText2 = "ASSESSMENT";
+  int titleWidth2 = strlen(titleText2) * 18; // Approximate width of larger text
+  int titleX2 = (SCREEN_WIDTH - titleWidth2) / 2;
+  tft.drawString(titleText2, titleX2, SCREEN_HEIGHT / 2 + 10); // Positioned below SPINE
+
+  // Draw start button
+  drawButton(startButton, TFT_BLUE);
+}
 // Draw terminal screen
 void drawTerminalScreen()
 {
-  tft.fillScreen(TFT_BLACK);
+  tft.fillScreen(TFT_WHITE);
 
   // Draw terminal border
-  tft.drawRect(TERM_X, TERM_Y, TERM_W, TERM_H, TFT_WHITE);
+  tft.drawRect(TERM_X, TERM_Y, TERM_W, TERM_H, TFT_BLACK);
 
   // Draw terminal header
-  tft.fillRect(TERM_X, TERM_Y, TERM_W, TERM_HEADER_H, TFT_DARKGREY);
+  tft.fillRect(TERM_X, TERM_Y, TERM_W, TERM_HEADER_H, TFT_BLACK);
 
   // Initialize terminal display
   terminal.drawBoxes();
@@ -220,40 +266,77 @@ void drawTerminalScreen()
   lastAnalogRead = millis();
 }
 
-// Draw result screen
+// // Draw result screen
+// void drawResultScreen()
+// {
+//   tft.fillScreen(TFT_WHITE);
+
+//   // Create result box
+//   int boxWidth = 280;
+//   int boxHeight = 120;
+//   int boxX = (SCREEN_WIDTH - boxWidth) / 2;
+//   int boxY = (SCREEN_HEIGHT - boxHeight) / 2;
+
+//   // Draw box
+//   tft.drawRect(boxX, boxY, boxWidth, boxHeight, TFT_BLACK);
+
+//   // Header
+//   tft.setTextColor(TFT_BLACK);
+//   tft.setTextSize(2);
+//   tft.drawString("Hasil:", boxX + 80, boxY + 10);
+
+//   // Show input data
+//   tft.setTextSize(1);
+//   char buffer[50];
+//   tft.drawString(buffer, boxX + 10, boxY + 40);
+
+//   // Show result
+//   tft.setTextSize(3);
+//   tft.setTextColor(TFT_BLACK);
+//   String result = String(hasilAnalisis);
+//   int textX = boxX + (boxWidth - result.length() * 12) / 2;
+//   tft.drawString(result, textX, boxY + 70);
+
+//   // Draw back button
+//   drawButton(backButton, TFT_BLUE);
+// }
+
 void drawResultScreen()
 {
-  tft.fillScreen(TFT_BLACK);
+  tft.fillScreen(TFT_WHITE);
+
+  // Header with black background
+  // tft.fillRect(0, 0, SCREEN_WIDTH, 40, TFT_BLACK);
+  // tft.setTextColor(TFT_WHITE);
+  // tft.setTextSize(2);
+  // tft.drawString("HASIL", (SCREEN_WIDTH - 50) / 2, 10);
+  tft.fillRect(TERM_X, TERM_Y, TERM_W, TERM_HEADER_H, TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(2);
+  tft.drawString("HASIL KLASIFIKASI", TERM_X - 75 + (TERM_W - 50) / 2, TERM_Y + 2);
 
   // Create result box
   int boxWidth = 280;
   int boxHeight = 120;
   int boxX = (SCREEN_WIDTH - boxWidth) / 2;
-  int boxY = (SCREEN_HEIGHT - boxHeight) / 2;
+  int boxY = 60; // Position below header
 
-  // Draw box
-  tft.drawRect(boxX, boxY, boxWidth, boxHeight, TFT_WHITE);
+  // Draw box with white background and black border
+  tft.fillRect(boxX, boxY, boxWidth, boxHeight, TFT_WHITE);
+  tft.drawRect(boxX, boxY, boxWidth, boxHeight, TFT_BLACK);
 
-  // Header
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(2);
-  tft.drawString("Hasil Analisis:", boxX + 10, boxY + 10);
-
-  // Show input data
-  tft.setTextSize(1);
-  char buffer[50];
-  tft.drawString(buffer, boxX + 10, boxY + 40);
-
-  // Show result
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_GREEN);
+  // Show result with black text
+  tft.setTextSize(3);
+  tft.setTextColor(TFT_BLACK);
   String result = String(hasilAnalisis);
-  int textX = boxX + (boxWidth - result.length() * 12) / 2;
-  tft.drawString(result, textX, boxY + 70);
+  int textX = boxX + (boxWidth - result.length() * 18) / 2; // Adjusted for text size
+  int textY = boxY + (boxHeight - 24) / 2;                  // Centered vertically
+  tft.drawString(result, textX, textY);
 
-  // Draw back button
+  // Draw back button (unchanged)
   drawButton(backButton, TFT_BLUE);
 }
+
 void tcaSelect(uint8_t i)
 {
   if (i > 7)
@@ -332,8 +415,7 @@ void processTouch()
       drawButton(backButton, TFT_RED);
       delay(100);
       currentScreen = 0;
-      tft.fillScreen(TFT_BLACK);
-      drawButton(startButton, TFT_BLUE);
+      drawMainScreen();
     }
   }
 }
@@ -455,8 +537,9 @@ void setup()
   delay(2000);
 
   // Return to main screen
-  tft.fillScreen(TFT_BLACK);
-  drawButton(startButton, TFT_BLUE);
+  // tft.fillScreen(TFT_BLACK);
+  // drawButton(startButton, TFT_BLUE);
+  drawMainScreen(); // Draw the main welcome screen
 
   Serial.println("Setup completed!");
 }
