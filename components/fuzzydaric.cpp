@@ -1,44 +1,18 @@
-
-// library utama
-#include <Arduino.h>
-#include <Fuzzy.h>
-
-// libeary mpu6050
-#include <Wire.h>
+#include "Wire.h"
 #include <MPU6050_light.h>
+#include <Fuzzy.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-// library lcd_TFT
-#include <TFT_eSPI.h>
-#include <SPI.h>
-#include <XPT2046_Touchscreen.h>
-
-// Global variable and declaration
-//-----------------------------------------------------------------------------------------------
-// mpu6050
-#define TCA9548A_ADDR 0x70
-
-// lcd_TFT
-#define TOUCH_CS_PIN 15
-#define TOUCH_IRQ_PIN 27
-#define TOUCH_MOSI 2
-#define TOUCH_MISO 26
-#define TOUCH_CLK 32
-#define TFT_BACKLIGHT_PIN 25
-TFT_eSPI tft = TFT_eSPI(); // Initialize TFT and Touch objects
-SPIClass touchSPI = SPIClass(VSPI);
-XPT2046_Touchscreen ts(TOUCH_CS_PIN, TOUCH_IRQ_PIN);
-
-// global variable Utama
-unsigned long timerColdstart = 0, intervalTimerColdstart = 10000;
-unsigned long timerSerialMOnitor = 0;
-unsigned long timerReadMpu = 0, intervalTimerReadMpu = 100;
-int hasilCompareFuzzy = 0;
-float nilai_normalis, nilai_lordosis, nilai_kifosis, nilai_skoliosis;
-String hasilAnalisis[4] = {"normal", "lordosis", "kifosis", "skoliosis"};
-float cervival_x = 0;
-float thoracal_x = 0, thoracal_z = 0;
-float lumbal_x = 0, lumbal_z = 0;
-float sacrum_x = 0;
+MPU6050 mpu(Wire);
+unsigned long timer = 0;
+float sumbux1, sumbux2, sumbux3, sumbux4, sumbux5, sumbux6;
+float sumbuy1, sumbuy2, sumbuy3, sumbuy4, sumbuy5, sumbuy6;
+float sumbuz1, sumbuz2, sumbuz3, sumbuz4, sumbuz5, sumbuz6;
+float linex;
+int led1 = 2;
+int led2 = 3;
+int led3 = 4;
 
 Fuzzy *fuzzy = new Fuzzy();
 
@@ -74,40 +48,79 @@ FuzzySet *lordosis = new FuzzySet(8, 12.75, 18.25, 22.75);
 FuzzySet *kifosis = new FuzzySet(18.25, 22.75, 28.25, 32.75);
 FuzzySet *skoliosis = new FuzzySet(28.25, 32.75, 40, 40);
 
-// global variable mp6050
-const int n_sensor = 4;
-const int n_ch = n_sensor + 1;
-float angle_x[n_ch] = {0}, angle_y[n_ch] = {0}, angle_z[n_ch] = {0};
-MPU6050 mpu[n_ch] = {MPU6050(Wire), MPU6050(Wire), MPU6050(Wire), MPU6050(Wire), MPU6050(Wire)}; // disesuaikan manual dengan jumlah sensor
-// String hasilAnalisis = "Amnesaia";
-
-// global variable lcd_TFT
-#define SCREEN_WIDTH 320 // Screen dimensions
-#define SCREEN_HEIGHT 240
-
-#define TERM_X 10 // Terminal dimensions
-#define TERM_Y 10
-#define TERM_W 300
-#define TERM_H 160
-#define TERM_HEADER_H 20
-
-#define BTN_WIDTH 100 // Button dimensions
-#define BTN_HEIGHT 35
-#define BTN_Y 190
-
-uint8_t currentScreen = 0; // Screen state  // 0 = main, 1 = terminal, 2 = result
-
-uint16_t touchX = 0, touchY = 0; // Variables for touch handling
-bool wasTouched = false;
-
-// global variable analog
-unsigned long lastAnalogRead = 0;                // Variables for analog reading
-const unsigned long ANALOG_READ_INTERVAL = 1000; // Read every 1 second
-
-// fungsi pendukung
-//-----------------------------------------------------------------------------------------------
-void fuzzyRule()
+void setup()
 {
+    Serial.begin(9600);
+    Wire.begin();
+    lcd.clear();
+    lcd.begin();
+    lcd.backlight();
+    lcd.noCursor();
+
+    pinMode(led1, OUTPUT);
+    pinMode(led2, OUTPUT);
+    pinMode(led3, OUTPUT);
+
+    byte status = mpu.begin();
+    Serial.print(F("MPU6050 status: "));
+    Serial.println(status);
+    while (status != 0)
+    {
+    } // stop everything if could not connect to MPU6050
+
+    Serial.println(F("Calculating offsets, do not move MPU6050"));
+    delay(1000);
+    // mpu.upsideDownMounting = true; // uncomment this line if the MPU6050 is mounted upside-down
+    mpu.calcOffsets(); // gyro and accelero
+    Serial.println("Done!\n");
+
+    // FuzzyInput ccx
+    FuzzyInput *ccx = new FuzzyInput(1);
+    ccx->addFuzzySet(normal1);
+    ccx->addFuzzySet(kelainan1);
+    fuzzy->addFuzzyInput(ccx);
+
+    // FuzzyInput tcx
+    FuzzyInput *tcx = new FuzzyInput(2);
+    tcx->addFuzzySet(normal2);
+    tcx->addFuzzySet(kelainan2);
+    fuzzy->addFuzzyInput(tcx);
+
+    // FuzzyInput tcz
+    FuzzyInput *tcz = new FuzzyInput(3);
+    tcz->addFuzzySet(normal3);
+    tcz->addFuzzySet(kelainankanan3);
+    tcz->addFuzzySet(kelainankiri3);
+    fuzzy->addFuzzyInput(tcz);
+
+    // FuzzyInput lcx
+    FuzzyInput *lcx = new FuzzyInput(4);
+    lcx->addFuzzySet(normal4);
+    lcx->addFuzzySet(kelainan4);
+    fuzzy->addFuzzyInput(lcx);
+
+    // FuzzyInput lcz
+    FuzzyInput *lcz = new FuzzyInput(5);
+    lcz->addFuzzySet(normal5);
+    lcz->addFuzzySet(kelainankanan5);
+    lcz->addFuzzySet(kelainankiri5);
+    fuzzy->addFuzzyInput(lcz);
+
+    // FuzzyInput scx
+    FuzzyInput *scx = new FuzzyInput(6);
+    scx->addFuzzySet(normal6);
+    scx->addFuzzySet(kelainan6);
+    fuzzy->addFuzzyInput(scx);
+
+    // FuzzyOutput
+    FuzzyOutput *hasil = new FuzzyOutput(1);
+
+    hasil->addFuzzySet(normalis);
+    hasil->addFuzzySet(lordosis);
+    hasil->addFuzzySet(kifosis);
+    hasil->addFuzzySet(skoliosis);
+    fuzzy->addFuzzyOutput(hasil);
+
     //===========================================================================================================
     // Building FuzzyRule 1
     FuzzyRuleAntecedent *ifccxNormal1AndtcxNormal2 = new FuzzyRuleAntecedent();
@@ -1334,611 +1347,129 @@ void fuzzyRule()
     fuzzy->addFuzzyRule(fuzzyRule72);
 }
 
-// class & struct begin --------------------------------
-class Terminal
+void loop()
 {
-private:
-    static const int BOX_WIDTH = 140;
-    static const int BOX_HEIGHT = 70;
-    static const int MARGIN = 10;
 
-public:
-    void drawBoxes()
-    {
-        // Clear previous display
-        tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_WHITE);
+    // data sensor1
+    digitalWrite(led1, LOW);
+    digitalWrite(led2, LOW);
+    digitalWrite(led3, LOW);
+    ambilsen1();
+    delay(200);
 
-        // Draw main title
-        tft.setTextColor(TFT_WHITE);
-        tft.setTextSize(2);
-        tft.drawString("DATA MONITORING", TERM_X + 60, TERM_Y + 2);
+    // data sensor2
+    digitalWrite(led1, HIGH);
+    digitalWrite(led2, LOW);
+    digitalWrite(led3, LOW);
+    ambilsen2();
+    delay(200);
 
-        // Calculate positions for boxes
-        int startX = TERM_X + MARGIN;
-        int startY = TERM_Y + TERM_HEADER_H + MARGIN;
+    // data sensor3
+    digitalWrite(led1, LOW);
+    digitalWrite(led2, HIGH);
+    digitalWrite(led3, LOW);
+    ambilsen3();
+    delay(200);
 
-        // Draw four boxes
-        drawDataBox("CERVICAL", startX, startY, 1);
-        drawDataBox("THORACAL", startX + BOX_WIDTH + MARGIN, startY, 2);
-        drawDataBox("LUMBAL", startX, startY + BOX_HEIGHT + MARGIN, 3);
-        drawDataBox("SACRUM", startX + BOX_WIDTH + MARGIN, startY + BOX_HEIGHT + MARGIN, 4);
-    }
+    // data sensor4
+    digitalWrite(led1, HIGH);
+    digitalWrite(led2, HIGH);
+    digitalWrite(led3, LOW);
+    ambilsen4();
+    delay(200);
 
-    void updateData()
-    {
-        // Calculate positions for boxes
-        int startX = TERM_X + MARGIN;
-        int startY = TERM_Y + TERM_HEADER_H + MARGIN;
+    lcd.setCursor(0, 0);
+    lcd.print(sumbux1);
+    lcd.print("/");
+    lcd.print(sumbux2);
+    lcd.print("/");
+    lcd.print(sumbuz2);
+    lcd.print("    ");
+    lcd.setCursor(0, 1);
+    lcd.print(sumbux3);
+    lcd.print("/");
+    lcd.print(sumbuz3);
+    lcd.print("/");
+    lcd.print(sumbux4);
+    lcd.print("  ");
 
-        // Update data in each box
-        updateBoxData(startX, startY, 1);
-        updateBoxData(startX + BOX_WIDTH + MARGIN, startY, 2);
-        updateBoxData(startX, startY + BOX_HEIGHT + MARGIN, 3);
-        updateBoxData(startX + BOX_WIDTH + MARGIN, startY + BOX_HEIGHT + MARGIN, 4);
-    }
-
-private:
-    void drawDataBox(const char *title, int x, int y, int boxNum)
-    {
-        // // Draw box outline
-        // tft.drawRect(x, y, BOX_WIDTH, BOX_HEIGHT, TFT_BLACK);
-
-        // // Draw title
-        // tft.setTextColor(TFT_NAVY);
-        // tft.setTextSize(1);
-        // tft.drawString(title, x + 5, y + 5);
-
-        // // Initial data display
-        // updateBoxData(x, y, boxNum);
-
-        // Draw box outline
-        tft.drawRect(x, y, BOX_WIDTH, BOX_HEIGHT, TFT_BLACK);
-
-        // Draw centered title
-        tft.setTextColor(TFT_NAVY);
-        tft.setTextSize(1);
-
-        // Calculate text width and center position
-        int titleWidth = strlen(title) * 6; // Approximate width for size 1 text
-        int titleX = x + (BOX_WIDTH - titleWidth) / 2;
-
-        tft.drawString(title, titleX, y + 5);
-
-        // Draw border bottom (separator line) below title
-        tft.drawLine(x, y + 18, x + BOX_WIDTH, y + 18, TFT_BLACK);
-
-        // Initial data display
-        updateBoxData(x, y, boxNum);
-    }
-
-    void updateBoxData(int x, int y, int boxNum)
-    {
-        char buffer[20];
-        tft.setTextColor(TFT_BLACK);
-        tft.setTextSize(1);
-
-        // Clear previous data area
-        tft.fillRect(x + 5, y + 24, BOX_WIDTH - 10, BOX_HEIGHT - 29, TFT_WHITE);
-
-        // Format and display X angle
-        snprintf(buffer, sizeof(buffer), "X: %+07.2f", angle_x[boxNum]);
-        tft.drawString(buffer, x + 5, y + 28);
-
-        // Format and display Y angle
-        snprintf(buffer, sizeof(buffer), "Y: %+07.2f", angle_y[boxNum]);
-        tft.drawString(buffer, x + 5, y + 41);
-
-        // Format and display Z angle
-        snprintf(buffer, sizeof(buffer), "Z: %+07.2f", angle_z[boxNum]);
-        tft.drawString(buffer, x + 5, y + 54);
-    }
-
-    void clear()
-    {
-        tft.fillRect(TERM_X, TERM_Y + TERM_HEADER_H, TERM_W, TERM_H - TERM_HEADER_H, TFT_WHITE);
-    }
-} terminal;
-
-struct Button // Button structure
-{
-    int x;
-    int y;
-    int width;
-    int height;
-    const char *label;
-};
-// class & struct end --------------------------------
-
-// Define buttons begin --------------------------------
-Button startButton = {
-    (SCREEN_WIDTH - BTN_WIDTH) / 2,
-    (SCREEN_HEIGHT / 2) + 55,
-    BTN_WIDTH,
-    BTN_HEIGHT,
-    "START"};
-
-Button nextButton = {
-    (SCREEN_WIDTH - BTN_WIDTH) / 2,
-    BTN_Y + 8,
-    BTN_WIDTH + 20,
-    BTN_HEIGHT,
-    "CLASSIFY"};
-
-Button backButton = {
-    (SCREEN_WIDTH - BTN_WIDTH) / 2,
-    SCREEN_HEIGHT - BTN_HEIGHT - 10,
-    BTN_WIDTH,
-    BTN_HEIGHT,
-    "BACK"};
-
-// Define buttons end --------------------------------
-
-// Function to draw button
-void drawButton(Button btn, uint16_t color)
-{
-    tft.fillRoundRect(btn.x, btn.y, btn.width, btn.height, 8, color);
-    tft.drawRoundRect(btn.x, btn.y, btn.width, btn.height, 8, TFT_WHITE);
-
-    int textWidth = strlen(btn.label) * 12;
-    int textX = btn.x + (btn.width - textWidth) / 2;
-    int textY = btn.y + (btn.height - 16) / 2;
-
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextSize(2);
-    tft.drawString(btn.label, textX, textY);
-}
-
-void drawMainScreen()
-{
-    tft.fillScreen(TFT_WHITE);
-
-    // Draw "Selamat Datang"
-    tft.setTextColor(TFT_NAVY);
-    tft.setTextSize(2); // Medium size
-    const char *welcomeText = "SELAMAT DATANG";
-    int welcomeWidth = strlen(welcomeText) * 12; // Approximate width of text
-    int welcomeX = (SCREEN_WIDTH - welcomeWidth) / 2;
-    tft.drawString(welcomeText, welcomeX, SCREEN_HEIGHT / 5);
-
-    // Draw "SPINE" on first line
-    tft.setTextSize(3); // Larger size
-    const char *titleText1 = "SPINE";
-    int titleWidth1 = strlen(titleText1) * 18; // Approximate width of larger text
-    int titleX1 = (SCREEN_WIDTH - titleWidth1) / 2;
-    tft.drawString(titleText1, titleX1, SCREEN_HEIGHT / 2 - 30);
-
-    // Draw "ASSESSMENT" on second line
-    const char *titleText2 = "ASSESSMENT";
-    int titleWidth2 = strlen(titleText2) * 18; // Approximate width of larger text
-    int titleX2 = (SCREEN_WIDTH - titleWidth2) / 2;
-    tft.drawString(titleText2, titleX2, SCREEN_HEIGHT / 2 + 10); // Positioned below SPINE
-
-    // Draw start button
-    drawButton(startButton, TFT_BLUE);
-}
-// Draw terminal screen
-void drawTerminalScreen()
-{
-    tft.fillScreen(TFT_WHITE);
-
-    // Draw terminal border
-    tft.drawRect(TERM_X, TERM_Y, TERM_W, TERM_H, TFT_BLACK);
-
-    // Draw terminal header
-    tft.fillRect(TERM_X, TERM_Y, TERM_W, TERM_HEADER_H, TFT_BLACK);
-
-    // Initialize terminal display
-    terminal.drawBoxes();
-
-    // Draw next button
-    drawButton(nextButton, TFT_BLUE);
-
-    lastAnalogRead = millis();
-}
-
-// draw result screen
-void drawResultScreen()
-{
-    tft.fillScreen(TFT_WHITE);
-
-    // Header with black background
-    // tft.fillRect(0, 0, SCREEN_WIDTH, 40, TFT_BLACK);
-    // tft.setTextColor(TFT_WHITE);
-    // tft.setTextSize(2);
-    // tft.drawString("HASIL", (SCREEN_WIDTH - 50) / 2, 10);
-    tft.fillRect(TERM_X, TERM_Y, TERM_W, TERM_HEADER_H, TFT_BLACK);
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextSize(2);
-    tft.drawString("HASIL KLASIFIKASI", TERM_X - 75 + (TERM_W - 50) / 2, TERM_Y + 2);
-
-    // Create result box
-    int boxWidth = 280;
-    int boxHeight = 120;
-    int boxX = (SCREEN_WIDTH - boxWidth) / 2;
-    int boxY = 60; // Position below header
-
-    // Draw box with white background and black border
-    tft.fillRect(boxX, boxY, boxWidth, boxHeight, TFT_WHITE);
-    tft.drawRect(boxX, boxY, boxWidth, boxHeight, TFT_BLACK);
-
-    // Show result with black text
-    tft.setTextSize(3);
-    tft.setTextColor(TFT_BLACK);
-    String result = String(hasilAnalisis[hasilCompareFuzzy]);
-    int textX = boxX + (boxWidth - result.length() * 18) / 2; // Adjusted for text size
-    int textY = boxY + (boxHeight - 24) / 2;                  // Centered vertically
-    tft.drawString(result, textX, textY);
-
-    // Draw back button (unchanged)
-    drawButton(backButton, TFT_BLUE);
-}
-
-void tcaSelect(uint8_t i)
-{
-    if (i > 7)
-        return;
-    Wire.beginTransmission(TCA9548A_ADDR);
-    Wire.write(1 << i);
-    Wire.endTransmission();
-}
-
-// fungsi komponen
-//-----------------------------------------------------------------------------------------------
-// Process
-int compareValues(float nilai_normalis, float nilai_lordosis, float nilai_kifosis, float nilai_skoliosis)
-{
-    // Print input values for debugging
-    Serial.println("Input nilai:");
-    Serial.print("Normalis: ");
-    Serial.println(nilai_normalis);
-    Serial.print("Lordosis: ");
-    Serial.println(nilai_lordosis);
-    Serial.print("Kifosis: ");
-    Serial.println(nilai_kifosis);
-    Serial.print("Skoliosis: ");
-    Serial.println(nilai_skoliosis);
-
-    int maxValue = nilai_normalis;
-    int maxIndex = 0;
-
-    if (nilai_lordosis > maxValue)
-    {
-        maxValue = nilai_lordosis;
-        maxIndex = 1;
-        Serial.println("Lordosis lebih besar");
-    }
-
-    if (nilai_kifosis > maxValue)
-    {
-        maxValue = nilai_kifosis;
-        maxIndex = 2;
-        Serial.println("Kifosis lebih besar");
-    }
-
-    if (nilai_skoliosis > maxValue)
-    {
-        maxValue = nilai_skoliosis;
-        maxIndex = 3;
-        Serial.println("Skoliosis lebih besar");
-    }
-
-    // Serial.print("Index terbesar: ");
-    // Serial.println(maxIndex);
-    // Serial.print("Nilai terbesar: ");
-    // Serial.println(maxValue);
-
-    return maxIndex;
-}
-
-void processData()
-{
-    // Print input values for debugging
-    Serial.println("Fuzzify nilai:");
-    Serial.print("cervical_x: ");
-    Serial.println(cervival_x);
-    Serial.print("thoracal_x: ");
-    Serial.println(thoracal_x);
-    Serial.print("thoracal_z: ");
-    Serial.println(thoracal_z);
-    Serial.print("lumbal_x: ");
-    Serial.println(lumbal_x);
-    Serial.print("lumbal_z: ");
-    Serial.println(lumbal_z);
-    Serial.print("sacrum_x: ");
-    Serial.println(sacrum_x);
-
-    fuzzy->setInput(1, cervival_x);
-    fuzzy->setInput(2, thoracal_x);
-    fuzzy->setInput(3, thoracal_z);
-    fuzzy->setInput(4, lumbal_x);
-    fuzzy->setInput(5, lumbal_z);
-    fuzzy->setInput(6, sacrum_x);
+    fuzzy->setInput(1, sumbux1);
+    fuzzy->setInput(2, sumbux2);
+    fuzzy->setInput(3, sumbuz2);
+    fuzzy->setInput(4, sumbux3);
+    fuzzy->setInput(5, sumbuz3);
+    fuzzy->setInput(6, sumbux4);
     fuzzy->fuzzify();
+
+    Serial.print("sumbux1: normal1-> ");
+    Serial.print(normal1->getPertinence());
+    Serial.print(", kelainan1-> ");
+    Serial.println(kelainan1->getPertinence());
+
+    Serial.print("sumbux2: normal2-> ");
+    Serial.print(normal2->getPertinence());
+    Serial.print(", kelainan2-> ");
+    Serial.println(kelainan2->getPertinence());
+
+    Serial.print("sumbuz2: normal3-> ");
+    Serial.print(normal3->getPertinence());
+    Serial.print(", kelainankiri3-> ");
+    Serial.print(kelainankiri3->getPertinence());
+    Serial.print(", kelainankanan3-> ");
+    Serial.println(kelainankanan3->getPertinence());
+
+    Serial.print("sumbux4: normal4-> ");
+    Serial.print(normal4->getPertinence());
+    Serial.print(", kelainan4-> ");
+    Serial.println(kelainan4->getPertinence());
+
+    Serial.print("sumbuz5: normal5-> ");
+    Serial.print(normal5->getPertinence());
+    Serial.print(", kelainankiri5-> ");
+    Serial.print(kelainankiri5->getPertinence());
+    Serial.print(", kelainankanan5-> ");
+    Serial.println(kelainankanan5->getPertinence());
+
+    Serial.print("sumbux6: normal6-> ");
+    Serial.print(normal6->getPertinence());
+    Serial.print(", kelainan6-> ");
+    Serial.println(kelainan6->getPertinence());
 
     float output1 = fuzzy->defuzzify(1);
 
-    nilai_normalis = normalis->getPertinence();
-    nilai_lordosis = lordosis->getPertinence();
-    nilai_kifosis = kifosis->getPertinence();
-    nilai_skoliosis = skoliosis->getPertinence();
-
-    hasilCompareFuzzy = compareValues(nilai_normalis, nilai_lordosis, nilai_kifosis, nilai_skoliosis);
-    Serial.print(hasilCompareFuzzy);
-    Serial.println(hasilAnalisis[hasilCompareFuzzy]);
-    Serial.println("Hasil: " + String(hasilAnalisis[hasilCompareFuzzy]));
+    Serial.println("Output: ");
+    Serial.print("normalis-> ");
+    Serial.print(normalis->getPertinence());
+    Serial.print(", lordosis-> ");
+    Serial.print(lordosis->getPertinence());
+    Serial.print(", kifosis-> ");
+    Serial.print(kifosis->getPertinence());
+    Serial.print(", skoliosis-> ");
+    Serial.println(skoliosis->getPertinence());
 }
 
-// Function to check button press
-bool isInButton(int x, int y, Button btn)
+void ambilsen1()
 {
-    return (x >= btn.x && x <= (btn.x + btn.width) &&
-            y >= btn.y && y <= (btn.y + btn.height));
+    mpu.update();
+    sumbux1 = mpu.getAngleX();
 }
 
-void readMpu()
+void ambilsen2()
 {
-    for (int ch = 1; ch < n_ch; ch++)
-    {
-        tcaSelect(ch);
-        mpu[ch].update();
-
-        angle_x[ch] = mpu[ch].getAngleX();
-        angle_y[ch] = mpu[ch].getAngleY();
-        angle_z[ch] = mpu[ch].getAngleZ();
-        delay(10);
-    }
-
-    cervival_x = angle_x[1];
-    thoracal_x = angle_x[2];
-    thoracal_z = angle_z[2];
-    lumbal_x = angle_x[3];
-    lumbal_z = angle_z[3];
-    sacrum_x = angle_x[4];
+    mpu.update();
+    sumbux2 = mpu.getAngleX();
+    sumbuz2 = mpu.getAngleZ();
 }
 
-void processTouch()
+void ambilsen3()
 {
-    TS_Point p = ts.getPoint();
-
-    touchX = map(p.x, 200, 3700, 0, SCREEN_WIDTH);
-    touchY = map(p.y, 240, 3800, 0, SCREEN_HEIGHT);
-
-    touchX = constrain(touchX, 0, SCREEN_WIDTH);
-    touchY = constrain(touchY, 0, SCREEN_HEIGHT);
-
-    if (currentScreen == 0)
-    {
-        if (isInButton(touchX, touchY, startButton))
-        {
-            drawButton(startButton, TFT_RED);
-            delay(100);
-            currentScreen = 1;
-            drawTerminalScreen();
-        }
-    }
-    else if (currentScreen == 1)
-    {
-        if (isInButton(touchX, touchY, nextButton))
-        {
-            drawButton(nextButton, TFT_RED);
-            delay(100);
-            processData();
-            delay(500);
-            currentScreen = 2;
-            drawResultScreen();
-        }
-    }
-    else if (currentScreen == 2)
-    {
-        if (isInButton(touchX, touchY, backButton))
-        {
-            drawButton(backButton, TFT_RED);
-            delay(100);
-            currentScreen = 0;
-            drawMainScreen();
-        }
-    }
+    mpu.update();
+    sumbux3 = mpu.getAngleX();
+    sumbuz3 = mpu.getAngleZ();
 }
 
-// fungsi monitoring
-//-----------------------------------------------------------------------------------------------
-void monitorSerial()
+void ambilsen4()
 {
-
-    for (int ch = 1; ch < n_ch; ch++)
-    {
-        // Serial.print("angX=");
-        Serial.print(angle_x[ch]);
-        Serial.print(",");
-        // Serial.print("angY=");
-        Serial.print(angle_y[ch]);
-        Serial.print(",");
-        // Serial.print("angZ=");
-        Serial.print(angle_z[ch]);
-        Serial.print(",");
-    }
-    Serial.println();
-}
-
-// fungsi utama
-//-----------------------------------------------------------------------------------------------
-
-void setup()
-{
-    Serial.begin(115200);
-    Wire.begin();
-    SPI.begin();
-
-    // FuzzyInput ccx
-    FuzzyInput *ccx = new FuzzyInput(1);
-    ccx->addFuzzySet(normal1);
-    ccx->addFuzzySet(kelainan1);
-    fuzzy->addFuzzyInput(ccx);
-
-    // FuzzyInput tcx
-    FuzzyInput *tcx = new FuzzyInput(2);
-    tcx->addFuzzySet(normal2);
-    tcx->addFuzzySet(kelainan2);
-    fuzzy->addFuzzyInput(tcx);
-
-    // FuzzyInput tcz
-    FuzzyInput *tcz = new FuzzyInput(3);
-    tcz->addFuzzySet(normal3);
-    tcz->addFuzzySet(kelainankanan3);
-    tcz->addFuzzySet(kelainankiri3);
-    fuzzy->addFuzzyInput(tcz);
-
-    // FuzzyInput lcx
-    FuzzyInput *lcx = new FuzzyInput(4);
-    lcx->addFuzzySet(normal4);
-    lcx->addFuzzySet(kelainan4);
-    fuzzy->addFuzzyInput(lcx);
-
-    // FuzzyInput lcz
-    FuzzyInput *lcz = new FuzzyInput(5);
-    lcz->addFuzzySet(normal5);
-    lcz->addFuzzySet(kelainankanan5);
-    lcz->addFuzzySet(kelainankiri5);
-    fuzzy->addFuzzyInput(lcz);
-
-    // FuzzyInput scx
-    FuzzyInput *scx = new FuzzyInput(6);
-    scx->addFuzzySet(normal6);
-    scx->addFuzzySet(kelainan6);
-    fuzzy->addFuzzyInput(scx);
-
-    // FuzzyOutput
-    FuzzyOutput *hasil = new FuzzyOutput(1);
-
-    hasil->addFuzzySet(normalis);
-    hasil->addFuzzySet(lordosis);
-    hasil->addFuzzySet(kifosis);
-    hasil->addFuzzySet(skoliosis);
-    fuzzy->addFuzzyOutput(hasil);
-
-    fuzzyRule();
-
-    // Initialize backlight tft
-    pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
-    digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
-
-    // Initialize TFT
-    tft.init();
-    tft.setRotation(1);
-    tft.fillScreen(TFT_BLACK);
-
-    // Initialize touch
-    touchSPI.begin(TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS_PIN);
-
-    if (!ts.begin(touchSPI))
-    {
-        Serial.println("Couldn't start touchscreen controller");
-        tft.drawString("Touch Error!", 10, 10);
-        while (1)
-            ;
-    }
-    ts.setRotation(3);
-
-    // Display calibration message
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextSize(2);
-    tft.drawString("Menyiapkan Alat", (SCREEN_WIDTH - 160) / 2, SCREEN_HEIGHT / 2 - 40);
-
-    // Add loading animation dots
-    tft.setTextSize(2);
-    const char *dots[] = {".", "..", "..."};
-    int dotIndex = 0;
-
-    // Initialize and calibrate each MPU6050
-    for (int ch = 1; ch < n_ch; ch++)
-    {
-        // Show which sensor is being calibrated
-        tft.fillRect(0, SCREEN_HEIGHT / 2, SCREEN_WIDTH, 30, TFT_BLACK);
-        tft.drawString("Sensor " + String(ch) + dots[dotIndex], (SCREEN_WIDTH - 100) / 2, SCREEN_HEIGHT / 2);
-        dotIndex = (dotIndex + 1) % 3;
-
-        tcaSelect(ch);
-        byte status = mpu[ch].begin();
-
-        while (status != 0)
-        {
-            Serial.println("MPU6050 at channel " + String(ch) + " not found");
-            // Show error on screen
-            tft.fillRect(0, SCREEN_HEIGHT / 2 + 30, SCREEN_WIDTH, 30, TFT_BLACK);
-            tft.setTextColor(TFT_RED);
-            tft.drawString("Error Sensor " + String(ch), (SCREEN_WIDTH - 140) / 2, SCREEN_HEIGHT / 2 + 30);
-            delay(1000);
-        }
-
-        Serial.println("set ofset for MPU6050 at channel " + String(ch));
-        delay(500);
-
-        // Show calibration message
-        tft.fillRect(0, SCREEN_HEIGHT / 2 + 30, SCREEN_WIDTH, 30, TFT_BLACK);
-        tft.setTextColor(TFT_GREEN);
-        tft.drawString("Kalibrasi...", (SCREEN_WIDTH - 100) / 2, SCREEN_HEIGHT / 2 + 30);
-
-        mpu[ch].calcOffsets(true, true); // gyro and accelero
-
-        // Show completion message for this sensor
-        tft.fillRect(0, SCREEN_HEIGHT / 2 + 30, SCREEN_WIDTH, 30, TFT_BLACK);
-        tft.drawString("OK!", (SCREEN_WIDTH - 30) / 2, SCREEN_HEIGHT / 2 + 30);
-        delay(500);
-    }
-
-    // Clear screen and show completion message
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_BROWN);
-    tft.drawString("Cold Start", (SCREEN_WIDTH - 150) / 2, SCREEN_HEIGHT / 2 - 20);
-    Serial.println("Cold Start");
-
-    // Wait for cold start
-    timerColdstart = millis();
-    while (millis() - timerColdstart < intervalTimerColdstart)
-    {
-        readMpu();
-    }
-
-    // Clear screen and show completion message
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString("Siap Digunakan!", (SCREEN_WIDTH - 150) / 2, SCREEN_HEIGHT / 2 - 20);
-    delay(2000);
-
-    // Return to main screen
-    // tft.fillScreen(TFT_BLACK);
-    // drawButton(startButton, TFT_BLUE);
-    drawMainScreen(); // Draw the main welcome screen
-
-    Serial.println("Setup completed!");
-}
-
-void loop()
-{
-    if (ts.touched())
-    {
-        if (!wasTouched)
-        {
-            wasTouched = true;
-            processTouch();
-        }
-    }
-    else
-    {
-        wasTouched = false;
-    }
-
-    // Update analog readings when in terminal screen
-    if (currentScreen == 1)
-    {
-        readMpu();
-        if ((millis() - timerSerialMOnitor) > 1000)
-        { // print data every second
-            timerSerialMOnitor = millis();
-
-            // terminalWrite();
-            terminal.updateData(); // Update the display
-            monitorSerial();
-        }
-    }
+    mpu.update();
+    sumbux4 = mpu.getAngleX();
 }
