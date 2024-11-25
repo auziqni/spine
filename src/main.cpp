@@ -1420,15 +1420,15 @@ private:
     tft.fillRect(x + 5, y + 24, BOX_WIDTH - 10, BOX_HEIGHT - 29, TFT_WHITE);
 
     // Format and display X angle
-    snprintf(buffer, sizeof(buffer), "X: %+07.2f", angle_x[boxNum]);
+    snprintf(buffer, sizeof(buffer), "X: %.2f", fabs(angle_x[boxNum]));
     tft.drawString(buffer, x + 5, y + 28);
 
     // Format and display Y angle
-    snprintf(buffer, sizeof(buffer), "Y: %+07.2f", angle_y[boxNum]);
+    snprintf(buffer, sizeof(buffer), "Y: %.2f", fabs(angle_y[boxNum]));
     tft.drawString(buffer, x + 5, y + 41);
 
     // Format and display Z angle
-    snprintf(buffer, sizeof(buffer), "Z: %+07.2f", angle_z[boxNum]);
+    snprintf(buffer, sizeof(buffer), "Z: %.2f", fabs(angle_z[boxNum]));
     tft.drawString(buffer, x + 5, y + 54);
   }
 
