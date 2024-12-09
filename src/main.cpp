@@ -1597,24 +1597,24 @@ int compareValues(float nilai_normalis, float nilai_lordosis, float nilai_kifosi
   Serial.print("Skoliosis: ");
   Serial.println(nilai_skoliosis);
 
-  int maxValue = nilai_normalis;
+  float maxValue = nilai_normalis;
   int maxIndex = 0;
 
-  if (nilai_lordosis > maxValue)
+  if (nilai_lordosis >= maxValue)
   {
     maxValue = nilai_lordosis;
     maxIndex = 1;
     Serial.println("Lordosis lebih besar");
   }
 
-  if (nilai_kifosis > maxValue)
+  if (nilai_kifosis >= maxValue)
   {
     maxValue = nilai_kifosis;
     maxIndex = 2;
     Serial.println("Kifosis lebih besar");
   }
 
-  if (nilai_skoliosis > maxValue)
+  if (nilai_skoliosis >= maxValue)
   {
     maxValue = nilai_skoliosis;
     maxIndex = 3;
